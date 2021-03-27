@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"golang.org/x/net/publicsuffix"
-	"gopkg.in/errgo.v1"
 )
 
 // PublicSuffixList provides the public suffix of a domain. For example:
@@ -116,7 +115,7 @@ func newAtTime(o *Options, now time.Time) (*Jar, error) {
 			jar.filename = DefaultCookieFile()
 		}
 		if err := jar.load(); err != nil {
-			return nil, errgo.Notef(err, "cannot load cookies")
+			return nil, err
 		}
 	}
 	jar.deleteExpired(now)

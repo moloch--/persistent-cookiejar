@@ -6,6 +6,7 @@ package cookiejar
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"os"
@@ -13,10 +14,7 @@ import (
 	"sort"
 	"time"
 
-	"gopkg.in/retry.v1"
-
-	filelock "github.com/juju/go4/lock"
-	"gopkg.in/errgo.v1"
+	"github.com/gofrs/flock"
 )
 
 // Save saves the cookies to the persistent cookie file.
@@ -41,14 +39,18 @@ func (j *Jar) MarshalJSON() ([]byte, error) {
 
 // save is like Save but takes the current time as a parameter.
 func (j *Jar) save(now time.Time) error {
-	locked, err := lockFile(lockFileName(j.filename))
+	locker := flock.New(lockFileName(j.filename))
+	locked, err := locker.TryLock()
 	if err != nil {
-		return errgo.Mask(err)
+		return err
 	}
-	defer locked.Close()
+	if !locked {
+		return errors.New("failed to lock file")
+	}
+	defer locker.Close()
 	f, err := os.OpenFile(j.filename, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
-		return errgo.Mask(err)
+		return err
 	}
 	defer f.Close()
 	// TODO optimization: if the file hasn't changed since we
@@ -62,10 +64,10 @@ func (j *Jar) save(now time.Time) error {
 	}
 	j.deleteExpired(now)
 	if err := f.Truncate(0); err != nil {
-		return errgo.Notef(err, "cannot truncate file")
+		return err
 	}
 	if _, err := f.Seek(0, 0); err != nil {
-		return errgo.Mask(err)
+		return err
 	}
 	return j.writeTo(f)
 }
@@ -79,11 +81,15 @@ func (j *Jar) load() error {
 		// to acquire the lock.
 		return nil
 	}
-	locked, err := lockFile(lockFileName(j.filename))
+	locker := flock.New(lockFileName(j.filename))
+	locked, err := locker.TryLock()
 	if err != nil {
-		return errgo.Mask(err)
+		return err
 	}
-	defer locked.Close()
+	if !locked {
+		return errors.New("failed to lock jar file")
+	}
+	defer locker.Close()
 	f, err := os.Open(j.filename)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -93,7 +99,7 @@ func (j *Jar) load() error {
 	}
 	defer f.Close()
 	if err := j.mergeFrom(f); err != nil {
-		return errgo.Mask(err)
+		return err
 	}
 	return nil
 }
@@ -150,23 +156,4 @@ func (j *Jar) allPersistentEntries() []entry {
 // the given path.
 func lockFileName(path string) string {
 	return path + ".lock"
-}
-
-var attempt = retry.LimitTime(3*time.Second, retry.Exponential{
-	Initial:  100 * time.Microsecond,
-	Factor:   1.5,
-	MaxDelay: 100 * time.Millisecond,
-})
-
-func lockFile(path string) (io.Closer, error) {
-	for a := retry.Start(attempt, nil); a.Next(); {
-		locker, err := filelock.Lock(path)
-		if err == nil {
-			return locker, nil
-		}
-		if !a.More() {
-			return nil, errgo.Notef(err, "file locked for too long; giving up")
-		}
-	}
-	panic("unreachable")
 }
