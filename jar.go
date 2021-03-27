@@ -359,6 +359,7 @@ func (j *Jar) RemoveCookie(c *http.Cookie) {
 		e.Expires = time.Now().Add(-1 * time.Second)
 		j.entries[key][id] = e
 	}
+	j.Save()
 }
 
 // merge merges all the given entries into j. More recently changed
@@ -426,6 +427,7 @@ func (j *Jar) RemoveAllHost(host string) {
 			submap[id] = e
 		}
 	}
+	j.Save()
 }
 
 // RemoveAll removes all the cookies from the jar.
@@ -444,6 +446,7 @@ func (j *Jar) RemoveAll() {
 			submap[id] = e
 		}
 	}
+	j.Save()
 }
 
 // SetCookies implements the SetCookies method of the http.CookieJar interface.
@@ -451,6 +454,7 @@ func (j *Jar) RemoveAll() {
 // It does nothing if the URL's scheme is not HTTP or HTTPS.
 func (j *Jar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 	j.setCookies(u, cookies, time.Now())
+	j.Save()
 }
 
 // setCookies is like SetCookies but takes the current time as parameter.
