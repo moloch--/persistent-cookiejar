@@ -47,7 +47,10 @@ func (j *Jar) save(now time.Time) error {
 	if !locked {
 		return errors.New("failed to lock file")
 	}
-	defer locker.Close()
+	defer func() {
+		locker.Close()
+		locker.Unlock()
+	}()
 	f, err := os.OpenFile(j.filename, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return err
@@ -89,7 +92,10 @@ func (j *Jar) load() error {
 	if !locked {
 		return errors.New("failed to lock jar file")
 	}
-	defer locker.Close()
+	defer func() {
+		locker.Close()
+		locker.Unlock()
+	}()
 	f, err := os.Open(j.filename)
 	if err != nil {
 		if os.IsNotExist(err) {
